@@ -1,29 +1,25 @@
 # app/moderator_bot.py
 """
-Advanced moderation bot using python-telegram-bot v20+ (async).
-Features:
-- /moderate to fetch next 'on_moderation' post
-- Approve -> moves to 'approved' (ready for publishing)
-- Reject -> moves to 'rejected'
-- Improve with AI (calls openai_chat via utils)
-- Random image from image bank
-- Category selection
+Moderator bot: provides interactive moderation UI for posts in 'on_moderation' status.
+Uses python-telegram-bot v20+ (async).
 """
 
-import logging, time, os
+import logging
+import time
+import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from .db import get_conn, ensure_schema
 from .utils import openai_chat, get_random_image_from_bank, post_message_to_channel, post_photo_to_channel
 from .config import MODERATOR_BOT_TOKEN, MODERATOR_CHAT_ID, AVAILABLE_CATEGORIES, CHANNELS, PUBLISHER_BOT_TOKEN, PUBLISHER_CHANNEL_ID
 
 logger = logging.getLogger("app.moderator")
-logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 
 def fetch_next_on_moderation():
-    conn = get_conn(); cur = conn.cursor()
-    row = cur.execute("SELECT * FROM posts WHERE status='on_moderation' ORDER BY created_at DESC LIMIT 1").fetchone()
+    conn = get_conn(); c = conn.cursor()
+    row = c.execute("SELECT * FROM posts WHERE status='on_moderation' ORDER BY created_at DESC LIMIT 1").fetchone()
     conn.close(); return row
 
 
@@ -31,7 +27,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_user.id != MODERATOR_CHAT_ID:
         await update.message.reply_text("⛔ Access denied.")
         return
-    await update.message.reply_text("🛠 Moderator bot ready. Use /moderate to fetch next post.")
+    await update.message.reply_text("Moderator bot active. Use /moderate to review posts.")
 
 
 async def moderate(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -40,14 +36,15 @@ async def moderate(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     row = fetch_next_on_moderation()
     if not row:
-        await update.message.reply_text("✅ No posts awaiting moderation.")
-        return
+        await update.message.reply_text("✅ No posts awaiting moderation."); return
 
     post = dict(row)
     channel_name = CHANNELS.get(post.get("channel_id"), f"Channel {post.get('channel_id')}")
     kb = [
-        [InlineKeyboardButton("✅ Approve", callback_data=f"approve_{post['id']}"), InlineKeyboardButton("❌ Reject", callback_data=f"reject_{post['id']}")],
-        [InlineKeyboardButton("✏️ Improve with AI", callback_data=f"improve_{post['id']}"), InlineKeyboardButton("🎲 Random Image", callback_data=f"randimg_{post['id']}")],
+        [InlineKeyboardButton("✅ Approve", callback_data=f"approve_{post['id']}"),
+         InlineKeyboardButton("❌ Reject", callback_data=f"reject_{post['id']}")],
+        [InlineKeyboardButton("✏️ Improve with AI", callback_data=f"improve_{post['id']}"),
+         InlineKeyboardButton("🎲 Random Image", callback_data=f"randimg_{post['id']}")],
         [InlineKeyboardButton("🏷️ Set Category", callback_data=f"setcat_{post['id']}")]
     ]
     reply = InlineKeyboardMarkup(kb)
@@ -97,15 +94,20 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             else:
                 cur.execute("UPDATE posts SET image_path=?, updated_at=? WHERE id=?", (img, int(time.time()), pid)); conn.commit()
                 await query.edit_message_text("✅ Random image applied.")
+        elif data.startswith("setcat_do_"):
+            # pattern: setcat_do_<pid>_<category>
+            parts = data.split("_", 3)
+            if len(parts) == 4:
+                pid = int(parts[2])
+                cat = parts[3]
+                cur.execute("UPDATE posts SET category=?, updated_at=? WHERE id=?", (cat, int(time.time()), pid)); conn.commit()
+                await query.edit_message_text(f"✅ Category set to {cat} for post {pid}")
+            else:
+                await query.edit_message_text("Invalid category selection.")
         elif data.startswith("setcat_"):
             pid = int(data.split("_", 1)[1])
             kb = [[InlineKeyboardButton(cat.capitalize(), callback_data=f"setcat_do_{pid}_{cat}")] for cat in AVAILABLE_CATEGORIES]
             await query.edit_message_text("Select category:", reply_markup=InlineKeyboardMarkup(kb))
-        elif data.startswith("setcat_do_"):
-            _, _, pid, cat = data.split("_", 3)
-            pid = int(pid)
-            cur.execute("UPDATE posts SET category=?, updated_at=? WHERE id=?", (cat, int(time.time()), pid)); conn.commit()
-            await query.edit_message_text(f"✅ Category set to {cat} for post {pid}")
         else:
             await query.edit_message_text("Unknown action.")
     except Exception as e:
@@ -122,8 +124,7 @@ async def rejected_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     rows = cur.execute("SELECT id, text, updated_at FROM posts WHERE status='rejected' ORDER BY updated_at DESC LIMIT 10").fetchall()
     conn.close()
     if not rows:
-        await update.message.reply_text("No rejected posts.")
-        return
+        await update.message.reply_text("No rejected posts"); return
     out = "\n\n".join([f"ID:{r['id']} - {r['text'][:120]}" for r in rows])
     await update.message.reply_text(out)
 
@@ -147,7 +148,7 @@ def main():
     app.add_handler(CommandHandler("rejected", rejected_cmd))
     app.add_handler(CommandHandler("stats", stats_cmd))
     app.add_handler(CallbackQueryHandler(callback_handler))
-    logger.info("Starting moderator bot...")
+    logger.info("Moderator bot started")
     app.run_polling()
 
 
