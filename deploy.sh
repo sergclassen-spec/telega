@@ -1,44 +1,42 @@
 #!/usr/bin/env bash
-# deploy.sh - example deployment steps for Ubuntu/Debian VPS
 set -euo pipefail
 
 PROJECT_DIR="$HOME/telegram_ai_channel_repo"
 USER="$(whoami)"
 
-# Clone repo if not exists
 if [ ! -d "${PROJECT_DIR}" ]; then
   git clone https://your.git.repo.url "${PROJECT_DIR}"
 fi
 
 cd "${PROJECT_DIR}"
 
-# Create virtualenv & install deps
+# virtualenv
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 
-# Create data directories
+# dirs
 mkdir -p data backups data/image_bank data/images app/assets
 
-# Create .env from example if doesn't exist
+# copy .env.example if .env missing
 if [ ! -f .env ]; then
   cp .env.example .env
-  echo "Please edit .env and fill in API keys before starting the service."
+  echo "Please edit .env with real API keys and channel IDs."
 fi
 
-# Initialize DB schema
+# initialize DB
 python3 - <<PY
 from app.db import ensure_schema
 ensure_schema()
 print("DB initialized")
 PY
 
-# Install systemd service (adjust paths/user if needed)
+# systemd service for scheduler
 SERVICE_FILE="/etc/systemd/system/telegram_ai_scheduler.service"
 sudo tee "${SERVICE_FILE}" >/dev/null <<SERVICE
 [Unit]
-Description=Telegram AI Channel Scheduler and Moderator
+Description=Telegram AI Scheduler
 After=network.target
 
 [Service]
@@ -58,5 +56,4 @@ sudo systemctl enable telegram_ai_scheduler.service
 sudo systemctl start telegram_ai_scheduler.service
 
 echo "Scheduler service installed and started."
-echo "You should run moderator bot separately (systemd or as a service):"
-echo "  ${PROJECT_DIR}/venv/bin/python -m app.moderator_bot"
+echo "Start moderator bot separately: ${PROJECT_DIR}/venv/bin/python -m app.moderator_bot"
