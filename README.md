@@ -1,11 +1,14 @@
 # telega
 app/
-├── db.py # SQLite connection & schema management
-├── generator.py # GPT-powered text generation & deduplication
-├── poster.py # Post to Telegram via Bot API
-├── rss_fetcher.py # Fetch and parse RSS feeds
-├── scheduler.py # APScheduler for regular jobs
-└── tracker.py # Flask app for click tracking
-backup.sh # Daily DB backup script
-requirements.txt # Python dependencies
-deploy.sh # Deployment helper script
+├── config.py # Centralized configuration
+├── db.py # DB helpers and schema
+├── utils.py # Common utilities (OpenAI, Telegram, images)
+├── rss_fetcher.py # RSS ingestion
+├── generator.py # Generation pipeline with moderation queue check
+├── poster.py # Posting to Telegram (publisher bot)
+├── moderator_bot.py # Integrated moderation bot (uses python-telegram-bot v20+)
+├── scheduler.py # Scheduler: jobs + cleanup
+└── tracker.py # Click tracker (unchanged)
+backup.sh
+requirements.txt
+deploy.sh
