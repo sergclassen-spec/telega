@@ -1,20 +1,13 @@
 # app/db.py
-"""
-DB helpers: connection factory, schema ensure, counts and cleanup queries.
-"""
-
-import sqlite3
-import os
-import time
+import sqlite3, os, time
 from typing import List, Tuple
 from .config import DB_PATH
 
-# ensure directory
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 
 
 def get_conn():
-    """Return a sqlite3 connection with WAL enabled and row factory."""
+    """Return sqlite3 connection with WAL and row factory."""
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL;")
@@ -22,11 +15,9 @@ def get_conn():
 
 
 def ensure_schema():
-    """Create tables and indexes if missing."""
-    conn = get_conn()
-    c = conn.cursor()
-    c.executescript(
-        """
+    """Create tables (idempotent)."""
+    conn = get_conn(); c = conn.cursor()
+    c.executescript("""
     CREATE TABLE IF NOT EXISTS posts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         source_title TEXT,
@@ -42,7 +33,6 @@ def ensure_schema():
         created_at INTEGER,
         updated_at INTEGER
     );
-
     CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status);
     CREATE INDEX IF NOT EXISTS idx_posts_created ON posts(created_at);
 
@@ -60,33 +50,24 @@ def ensure_schema():
         ip TEXT,
         ua TEXT
     );
-    """
-    )
-    conn.commit()
-    conn.close()
+    """)
+    conn.commit(); conn.close()
 
 
 def count_posts_with_status(status: str) -> int:
-    conn = get_conn()
-    c = conn.cursor()
+    conn = get_conn(); c = conn.cursor()
     r = c.execute("SELECT COUNT(1) as cnt FROM posts WHERE status = ?", (status,)).fetchone()
     conn.close()
     return int(r["cnt"]) if r else 0
 
 
 def get_old_rejected_and_stale(on_moderation_days: int, rejected_hours: int) -> List[Tuple[int, str]]:
-    """Return list of (id, image_path) of posts to delete by time thresholds."""
     now = int(time.time())
     stale_ts = now - int(on_moderation_days) * 86400
     rejected_ts = now - int(rejected_hours) * 3600
-    conn = get_conn()
-    c = conn.cursor()
+    conn = get_conn(); c = conn.cursor()
     rows = c.execute(
-        """
-        SELECT id, image_path FROM posts
-        WHERE (status='rejected' AND updated_at<?)
-           OR (status='on_moderation' AND updated_at<?)
-    """,
+        "SELECT id, image_path FROM posts WHERE (status='rejected' AND updated_at<?) OR (status='on_moderation' AND updated_at<?)",
         (rejected_ts, stale_ts),
     ).fetchall()
     conn.close()
