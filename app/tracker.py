@@ -1,15 +1,11 @@
 # app/tracker.py
-"""
-Flask tracker for affiliate redirects.
-"""
-
-from flask import Flask, redirect, request, abort
-import time
-import os
+from flask import Flask, request, redirect, abort
 from .db import get_conn
+import time, os, logging
 from .config import TRACKER_PORT
 
 app = Flask(__name__)
+logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 
 
 def client_ip():
@@ -20,7 +16,7 @@ def client_ip():
 
 
 @app.route("/r/<int:aid>")
-def redirect_affiliate(aid: int):
+def redirect_affiliate(aid):
     conn = get_conn(); cur = conn.cursor()
     row = cur.execute("SELECT target_url FROM affiliates WHERE id=?", (aid,)).fetchone()
     if not row:
