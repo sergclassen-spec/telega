@@ -1,14 +1,13 @@
 # app/tracker.py
 """
-Lightweight Flask tracker for affiliate redirects.
-- Uses X-Forwarded-For header when present.
-- Logs clicks into clicks table.
+Flask tracker for affiliate redirects.
 """
 
 from flask import Flask, redirect, request, abort
-import os, time
+import time
+import os
 from .db import get_conn
-from .config import DB_PATH
+from .config import TRACKER_PORT
 
 app = Flask(__name__)
 
@@ -34,5 +33,4 @@ def redirect_affiliate(aid: int):
 
 
 if __name__ == "__main__":
-    # For development only: run Flask built-in server
-    app.run(host="0.0.0.0", port=int(os.getenv("TRACKER_PORT", "5000")))
+    app.run(host="0.0.0.0", port=TRACKER_PORT)
