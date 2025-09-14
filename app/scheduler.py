@@ -1,23 +1,20 @@
 # app/scheduler.py
 """
-Scheduler orchestrates:
-- periodic RSS fetch + batch generation (generator.batch_generate)
-- periodic cleanup for stale/rejected posts
-- optional periodic notification jobs (if desired)
+Scheduler: runs fetch+generate and cleanup jobs.
+Run as module: python -m app.scheduler
 """
 
-import time, logging
+import time
+import logging
 from apscheduler.schedulers.background import BackgroundScheduler
 from .rss_fetcher import fetch_rss
 from .generator import batch_generate
-from .db import get_old_rejected_and_stale, get_conn, ensure_schema
+from .db import get_old_rejected_and_stale, ensure_schema, get_conn
 from .config import DRAFT_POSTS_LIFETIME_DAYS, REJECTED_POSTS_LIFETIME_HOURS, AUTO_DELETE_ENABLED
 import os
 
 logger = logging.getLogger("app.scheduler")
-logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
-
-scheduler = BackgroundScheduler()
+logger.setLevel(os.getenv("LOG_LEVEL", "INFO"))
 
 
 def job_fetch_and_generate():
@@ -47,9 +44,8 @@ def cleanup_job():
 
 def start():
     ensure_schema()
-    # Fetch+generate every hour
+    scheduler = BackgroundScheduler()
     scheduler.add_job(job_fetch_and_generate, "interval", hours=1, id="gen_job")
-    # Cleanup job every 6 hours
     scheduler.add_job(cleanup_job, "interval", hours=6, id="cleanup_job")
     scheduler.start()
     logger.info("Scheduler started.")
@@ -58,3 +54,7 @@ def start():
             time.sleep(1)
     except KeyboardInterrupt:
         scheduler.shutdown()
+
+
+if __name__ == "__main__":
+    start()
