@@ -41,3 +41,6 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 
 # Rclone remote
 RCLONE_REMOTE = os.getenv("RCLONE_REMOTE", "remote:tg_backups")
+
+# Click tracker
+TRACKER_PORT = int(os.getenv("TRACKER_PORT", "8080"))
